@@ -21,16 +21,17 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
+// ✅ Updated CORS for local + Vercel frontend
 const corsOptions = {
-  origin: "http://localhost:8080",
+  origin: [
+    "http://localhost:8080",
+    "https://investor-frontend-taupe.vercel.app"
+  ],
   credentials: true,
 };
 app.use(cors(corsOptions));
 
-const io = new Server(server, {
-  cors: corsOptions,
-});
-
+const io = new Server(server, { cors: corsOptions });
 app.set("socketio", io);
 
 app.use(express.json());
