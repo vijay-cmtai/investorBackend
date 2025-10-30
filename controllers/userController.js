@@ -1,13 +1,18 @@
 const User = require("../models/UserModel");
 const asyncHandler = require("express-async-handler");
+const APIFeatures = require("../utils/apiFeatures");
 
-// @desc    Get all users (Admin)
 exports.getUsers = asyncHandler(async (req, res) => {
-  const users = await User.find({});
+  const features = new APIFeatures(User.find(), req.query)
+    .filter()
+    .sort()
+    .limitFields()
+    .paginate();
+  const users = await features.query;
+
   res.status(200).json({ success: true, count: users.length, data: users });
 });
 
-// @desc    Get single user by ID (Admin)
 exports.getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) {
@@ -17,7 +22,6 @@ exports.getUserById = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: user });
 });
 
-// @desc    Update user by ID (Admin)
 exports.updateUser = asyncHandler(async (req, res) => {
   const user = await User.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
@@ -30,7 +34,6 @@ exports.updateUser = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: user });
 });
 
-// @desc    Delete user by ID (Admin)
 exports.deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) {
@@ -41,8 +44,16 @@ exports.deleteUser = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: {} });
 });
 
-// @desc    Get all brokers (Admin)
-exports.getBrokers = asyncHandler(async (req, res) => {
-  const brokers = await User.find({ role: "broker" });
-  res.status(200).json({ success: true, count: brokers.length, data: brokers });
+exports.getAssociates = asyncHandler(async (req, res) => {
+  const associates = await User.find({ role: "Associate" });
+  res
+    .status(200)
+    .json({ success: true, count: associates.length, data: associates });
+});
+
+exports.getCompanies = asyncHandler(async (req, res) => {
+  const companies = await User.find({ role: "Company" });
+  res
+    .status(200)
+    .json({ success: true, count: companies.length, data: companies });
 });

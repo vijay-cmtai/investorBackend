@@ -1,6 +1,7 @@
 const Inquiry = require("../models/inquiryModel.js");
 const Property = require("../models/PropertyModel.js");
 const asyncHandler = require("express-async-handler");
+
 const createInquiry = asyncHandler(async (req, res) => {
   const { propertyId, name, email, phone, message } = req.body;
   const userId = req.user._id;
@@ -19,7 +20,7 @@ const createInquiry = asyncHandler(async (req, res) => {
 
   const inquiry = await Inquiry.create({
     user: userId,
-    owner: property.user, 
+    owner: property.user,
     property: propertyId,
     name,
     email,
@@ -39,13 +40,10 @@ const createInquiry = asyncHandler(async (req, res) => {
   }
 });
 
-// @desc    Get inquiries sent by the logged-in user
-// @route   GET /api/inquiries/sent
-// @access  Private
 const getMySentInquiries = asyncHandler(async (req, res) => {
   const inquiries = await Inquiry.find({ user: req.user._id })
-    .populate("property", "title location") 
-    .populate("owner", "name email") 
+    .populate("property", "title location")
+    .populate("owner", "name email")
     .sort({ createdAt: -1 });
 
   res
@@ -53,13 +51,15 @@ const getMySentInquiries = asyncHandler(async (req, res) => {
     .json({ success: true, count: inquiries.length, data: inquiries });
 });
 
-// @desc    Get inquiries received by the logged-in user (for their properties)
-// @route   GET /api/inquiries/received
-// @access  Private
 const getMyReceivedInquiries = asyncHandler(async (req, res) => {
-  const inquiries = await Inquiry.find({ owner: req.user._id })
-    .populate("property", "title location") 
-    .populate("user", "name email") 
+  // --- YAHAN PAR ADMIN KE LIYE LOGIC ADD KIYA GAYA HAI ---
+  // Agar user Admin hai, to saari inquiries dikhao.
+  // Agar nahi, to sirf uski inquiries dikhao.
+  const query = req.user.role === "Admin" ? {} : { owner: req.user._id };
+
+  const inquiries = await Inquiry.find(query)
+    .populate("property", "title location")
+    .populate("user", "name email")
     .sort({ createdAt: -1 });
 
   res
@@ -67,9 +67,6 @@ const getMyReceivedInquiries = asyncHandler(async (req, res) => {
     .json({ success: true, count: inquiries.length, data: inquiries });
 });
 
-// @desc    Update inquiry status (by property owner)
-// @route   PUT /api/inquiries/:id/status
-// @access  Private
 const updateInquiryStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
   const inquiry = await Inquiry.findById(req.params.id);
@@ -79,7 +76,12 @@ const updateInquiryStatus = asyncHandler(async (req, res) => {
     throw new Error("Inquiry not found");
   }
 
-  if (inquiry.owner.toString() !== req.user._id.toString()) {
+  // --- YAHAN PAR SECURITY CHECK KO UPDATE KIYA GAYA HAI ---
+  // Check karo ki ya toh user Admin hai, YA phir woh inquiry ka owner hai.
+  if (
+    inquiry.owner.toString() !== req.user._id.toString() &&
+    req.user.role !== "Admin"
+  ) {
     res.status(401);
     throw new Error("Not authorized to update this inquiry");
   }
@@ -90,9 +92,6 @@ const updateInquiryStatus = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: updatedInquiry });
 });
 
-// @desc    Delete an inquiry
-// @route   DELETE /api/inquiries/:id
-// @access  Private
 const deleteInquiry = asyncHandler(async (req, res) => {
   const inquiry = await Inquiry.findById(req.params.id);
 
@@ -101,7 +100,10 @@ const deleteInquiry = asyncHandler(async (req, res) => {
     throw new Error("Inquiry not found");
   }
 
+  // --- YAHAN PAR BHI SECURITY CHECK UPDATE KIYA GAYA HAI ---
+  // Sirf Admin, inquiry bhejne wala, ya inquiry receive karne wala hi delete kar sakta hai.
   if (
+    req.user.role !== "Admin" &&
     inquiry.user.toString() !== req.user._id.toString() &&
     inquiry.owner.toString() !== req.user._id.toString()
   ) {

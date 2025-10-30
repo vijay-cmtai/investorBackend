@@ -35,7 +35,7 @@ const PropertySchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Pending", "Approved", "Rejected"],
+      enum: ["Pending", "Approved", "Rejected", "Sold"],
       default: "Pending",
     },
     images: { type: [String], default: [] },

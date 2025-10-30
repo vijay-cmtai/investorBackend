@@ -1,53 +1,161 @@
 const User = require("../models/UserModel");
 const asyncHandler = require("express-async-handler");
+const crypto = require("crypto");
+const sendEmail = require("../utils/mailer");
 
-const sendTokenResponse = (user, statusCode, res) => {
+const sendTokenResponse = (user, statusCode, res, message = "") => {
   const token = user.getSignedJwtToken();
+  const { _id, name, email, role } = user;
   res.status(statusCode).json({
     success: true,
+    message,
     token,
-    user: { id: user._id, name: user.name, email: user.email, role: user.role },
+    user: { id: _id, name, email, role },
   });
 };
+
+const generateOtp = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
+
 exports.register = asyncHandler(async (req, res) => {
   const { name, email, password, role } = req.body;
-  const userExists = await User.findOne({ email });
-  if (userExists) {
+  if (!name || !email || !password || !role) {
     res.status(400);
-    throw new Error("User already exists");
+    throw new Error("Name, email, password, and role are required.");
   }
-  const user = await User.create({ name, email, password, role });
-  sendTokenResponse(user, 201, res);
+
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    res.status(409);
+    throw new Error("User with this email already exists.");
+  }
+
+  if (role === "Admin") {
+    const adminUser = await User.create({
+      name,
+      email,
+      password,
+      role: "Admin",
+      isVerified: true,
+    });
+    sendTokenResponse(
+      adminUser,
+      201,
+      res,
+      "Admin account created successfully."
+    );
+  } else {
+    const otp = generateOtp();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    const emailHtml = `
+      <div style="font-family: sans-serif; text-align: center; padding: 20px;">
+        <h2>Welcome to Investorsdeaal!</h2>
+        <p>Hi ${name}, your OTP for email verification is:</p>
+        <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px;">${otp}</p>
+        <p>This OTP is valid for 10 minutes.</p>
+      </div>
+    `;
+    await User.create({ name, email, password, role, otp, otpExpiry });
+    await sendEmail(email, "Verify Your Email Address", emailHtml);
+    res.status(201).json({
+      success: true,
+      message: `User registration initiated. An OTP has been sent to ${email}.`,
+    });
+  }
 });
 
-// @desc    Login user (READ)
+exports.verifyOtp = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+  if (!email || !otp) {
+    res.status(400);
+    throw new Error("Email and OTP are required.");
+  }
+  const user = await User.findOne({
+    email,
+    otp,
+    otpExpiry: { $gt: Date.now() },
+  });
+  if (!user) {
+    res.status(400);
+    throw new Error("Invalid or expired OTP.");
+  }
+  user.isVerified = true;
+  user.otp = undefined;
+  user.otpExpiry = undefined;
+  await user.save();
+  sendTokenResponse(user, 200, res, "Email verified successfully!");
+});
+
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    res.status(400);
-    throw new Error("Please provide email and password");
-  }
   const user = await User.findOne({ email }).select("+password");
   if (!user || !(await user.matchPassword(password))) {
     res.status(401);
     throw new Error("Invalid credentials");
   }
-  sendTokenResponse(user, 200, res);
+  if (!user.isVerified) {
+    res.status(403);
+    throw new Error(
+      "Account not verified. Please check your email for the verification OTP."
+    );
+  }
+  sendTokenResponse(user, 200, res, "Login successful!");
+});
+
+exports.forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) {
+    res.status(404);
+    throw new Error("There is no user with that email address.");
+  }
+  const resetToken = crypto.randomBytes(32).toString("hex");
+  user.forgotPasswordToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+  user.forgotPasswordExpiry = Date.now() + 10 * 60 * 1000;
+  await user.save();
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+  const emailHtml = `<p>Please click this link to reset your password: <a href="${resetUrl}">${resetUrl}</a></p>`;
+  try {
+    await sendEmail(user.email, "Password Reset Request", emailHtml);
+    res.status(200).json({
+      success: true,
+      message: "Password reset link sent to your email!",
+    });
+  } catch (err) {
+    user.forgotPasswordToken = undefined;
+    user.forgotPasswordExpiry = undefined;
+    await user.save();
+    res.status(500);
+    throw new Error("Email could not be sent.");
+  }
+});
+
+exports.resetPassword = asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+  if (!password) {
+    res.status(400);
+    throw new Error("Password is required.");
+  }
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+  const user = await User.findOne({
+    forgotPasswordToken: hashedToken,
+    forgotPasswordExpiry: { $gt: Date.now() },
+  });
+  if (!user) {
+    res.status(400);
+    throw new Error("Token is invalid or has expired.");
+  }
+  user.password = password;
+  user.forgotPasswordToken = undefined;
+  user.forgotPasswordExpiry = undefined;
+  await user.save();
+  sendTokenResponse(user, 200, res, "Password has been reset successfully.");
 });
 
 exports.getMe = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: req.user });
-});
-
-exports.updateDetails = asyncHandler(async (req, res) => {
-  const { name, email } = req.body;
-  const user = await User.findByIdAndUpdate(
-    req.user.id,
-    { name, email },
-    {
-      new: true,
-      runValidators: true,
-    }
-  );
-  res.status(200).json({ success: true, data: user });
 });
