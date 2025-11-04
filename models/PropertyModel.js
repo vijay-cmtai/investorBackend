@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const PropertySchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
@@ -30,7 +29,7 @@ const PropertySchema = new mongoose.Schema(
     },
     transaction_type: {
       type: String,
-      enum: ["sale", "rent", "lease"],
+      enum: ["sale", "rent", "lease", "commercial"],
       required: true,
     },
     status: {
@@ -42,10 +41,17 @@ const PropertySchema = new mongoose.Schema(
     bedrooms: { type: Number, required: true, default: 0 },
     bathrooms: { type: Number, required: true, default: 0 },
     square_feet: { type: Number, required: true },
-    user: {
-      type: mongoose.Schema.ObjectId,
-      ref: "User",
-      required: true,
+    user: { type: mongoose.Schema.ObjectId, ref: "User", required: true },
+    commission: {
+      type: {
+        percentage: { type: Number, default: 2 },
+        assignedAssociate: {
+          type: mongoose.Schema.ObjectId,
+          ref: "User",
+          default: null,
+        },
+      },
+      default: {},
     },
     isFeatured: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
@@ -60,15 +66,21 @@ const PropertySchema = new mongoose.Schema(
     },
     amenities: { type: [String], default: [] },
     availableFrom: { type: Date },
-    agent: {
-      type: {
-        name: { type: String },
-        phone: { type: String },
-      },
-      default: null,
-    },
+    averageRating: { type: Number, min: 0, max: 5, default: 0 },
+    numReviews: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
+
+PropertySchema.virtual("reviews", {
+  ref: "Review",
+  localField: "_id",
+  foreignField: "property",
+  justOne: false,
+});
 
 module.exports = mongoose.model("Property", PropertySchema);

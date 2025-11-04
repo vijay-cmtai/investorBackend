@@ -1,87 +1,115 @@
 const asyncHandler = require("express-async-handler");
-const User = require("../models/UserModel");
 const Property = require("../models/PropertyModel");
-const Lead = require("../models/LeadModel");
 const Sale = require("../models/SaleModel");
-const Commission = require("../models/CommissionModel");
+const User = require("../models/UserModel");
+const Lead = require("../models/LeadModel");
 
-exports.getDashboardData = asyncHandler(async (req, res) => {
-  const user = req.user;
-  let data = {};
+const getAdminDashboardStats = asyncHandler(async (req, res) => {
+  // 1. Basic Counts
+  const totalProperties = await Property.countDocuments({});
+  const totalUsers = await User.countDocuments({});
+  // Assuming 'active' leads are any that aren't marked 'Closed' or similar
+  const activeLeads = await Lead.countDocuments({ status: { $ne: "Closed" } });
 
-  if (user.role === "Admin") {
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  // 2. Sales Value
+  const totalSalesData = await Sale.aggregate([
+    { $group: { _id: null, total: { $sum: "$salePrice" } } },
+  ]);
+  const totalSalesValue =
+    totalSalesData.length > 0 ? totalSalesData[0].total : 0;
 
-    const [
-      totalUsers,
-      totalProperties,
-      activeLeads,
-      totalSales,
-      monthlyRevenue,
-      recentSales,
-    ] = await Promise.all([
-      User.countDocuments(),
-      Property.countDocuments(),
-      Lead.countDocuments({ status: { $ne: "Converted" } }),
-      Sale.aggregate([
-        { $group: { _id: null, total: { $sum: "$salePrice" } } },
-      ]),
-      Sale.aggregate([
-        { $match: { createdAt: { $gte: sixMonthsAgo } } },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
-            total: { $sum: "$salePrice" },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-      Sale.find()
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .populate("property", "title")
-        .populate("sellerAssociate", "name"),
-    ]);
+  // 3. Monthly Revenue for Chart
+  const now = new Date();
+  const oneYearAgo = new Date(
+    now.getFullYear() - 1,
+    now.getMonth(),
+    now.getDate()
+  );
 
-    data = {
-      totalUsers,
-      totalProperties,
-      activeLeads,
-      totalSalesValue: totalSales[0]?.total || 0,
-      monthlyRevenue,
-      recentSales,
-    };
-  } else if (user.role === "Company") {
-    // Company logic yahan aayega
-    const associates = await User.find({ company: user._id });
-    const associateIds = associates.map((a) => a._id);
-    const [totalAssociates, companyLeads, companySales] = await Promise.all([
-      User.countDocuments({ company: user._id }),
-      Lead.countDocuments({ assignedTo: { $in: associateIds } }),
-      Sale.countDocuments({ sellerAssociate: { $in: associateIds } }),
-    ]);
-    data = { totalAssociates, companyLeads, companySales };
-  } else if (user.role === "Associate" || user.role === "Broker") {
-    // Associate/Broker logic yahan aayega
-    const [myLeads, mySales, myCommission, downlineCount] = await Promise.all([
-      Lead.countDocuments({ assignedTo: user._id }),
-      Sale.countDocuments({ sellerAssociate: user._id }),
-      Commission.aggregate([
-        { $match: { user: user._id } },
-        { $group: { _id: "$status", total: { $sum: "$amount" } } },
-      ]),
-      User.countDocuments({ referredBy: user._id }),
-    ]);
-    const commissions = myCommission.reduce((acc, curr) => {
-      acc[curr._id] = curr.total;
-      return acc;
-    }, {});
-    data = { myLeads, mySales, commissions, downlineCount };
-  } else {
-    // Customer logic
-    data = { message: "Welcome to your dashboard" };
-  }
+  const monthlyRevenue = await Sale.aggregate([
+    { $match: { saleDate: { $gte: oneYearAgo } } },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m", date: "$saleDate" } },
+        total: { $sum: "$salePrice" },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ]);
 
-  res.status(200).json({ success: true, data });
+  // 4. Recent Sales for Table
+  const recentSales = await Sale.find({})
+    .sort({ saleDate: -1 })
+    .limit(5)
+    .populate("buyer", "name email"); // Fetch buyer's name and email
+
+  res.status(200).json({
+    totalProperties,
+    totalSalesValue,
+    totalUsers,
+    activeLeads,
+    monthlyRevenue,
+    recentSales,
+  });
 });
+
+// Baaki ke functions waise hi rahenge
+const getCompanyDashboardStats = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const totalProperties = await Property.countDocuments({ user: userId });
+  const companyProperties = await Property.find({ user: userId }).select("_id");
+  const propertyIds = companyProperties.map((p) => p._id);
+
+  const monthlySales = await Sale.aggregate([
+    {
+      $match: {
+        property: { $in: propertyIds },
+        saleDate: { $gte: startOfMonth },
+      },
+    },
+    { $group: { _id: null, total: { $sum: "$salePrice" } } },
+  ]);
+
+  const newLeadsCount = await Lead.countDocuments({
+    company: userId,
+    createdAt: { $gte: startOfMonth },
+  });
+
+  const reportsGenerated = await Sale.countDocuments({
+    property: { $in: propertyIds },
+  });
+
+  res.status(200).json({
+    totalProperties,
+    totalSalesMonth: monthlySales.length > 0 ? monthlySales[0].total : 0,
+    newLeadsMonth: newLeadsCount,
+    reportsGenerated,
+  });
+});
+
+const getRecentProperties = asyncHandler(async (req, res) => {
+  const filter = req.user.role === "admin" ? {} : { user: req.user._id };
+  const properties = await Property.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(5);
+  res.status(200).json(properties);
+});
+
+const getRecentLeads = asyncHandler(async (req, res) => {
+  const filter = req.user.role === "admin" ? {} : { company: req.user._id };
+  const leads = await Lead.find(filter)
+    .populate("property", "title")
+    .sort({ createdAt: -1 })
+    .limit(5);
+  res.status(200).json(leads);
+});
+
+module.exports = {
+  getAdminDashboardStats,
+  getCompanyDashboardStats,
+  getRecentProperties,
+  getRecentLeads,
+};

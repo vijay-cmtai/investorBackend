@@ -1,18 +1,34 @@
 const Property = require("../models/PropertyModel");
+const User = require("../models/UserModel");
 const asyncHandler = require("express-async-handler");
 
 exports.getProperties = asyncHandler(async (req, res) => {
-  const properties = await Property.find({}).populate("user", "name role");
+  let query = {};
+  if (req.user && req.user.role !== "Admin") {
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    if (userRole === "Associate") {
+      query = { user: userId };
+    } else if (userRole === "Company") {
+      const associates = await User.find({ referredBy: userId }).select("_id");
+      const associateIds = associates.map((a) => a._id);
+      const userIds = [userId, ...associateIds];
+      query = { user: { $in: userIds } };
+    }
+  }
+  const properties = await Property.find(query)
+    .populate("user", "name role")
+    .sort({ createdAt: -1 });
   res
     .status(200)
     .json({ success: true, count: properties.length, data: properties });
 });
 
 exports.getProperty = asyncHandler(async (req, res) => {
-  const property = await Property.findById(req.params.id).populate(
-    "user",
-    "name email"
-  );
+  const property = await Property.findById(req.params.id)
+    .populate("user", "name email role")
+    .populate("reviews");
+
   if (!property) {
     res.status(404);
     throw new Error("Property not found");
@@ -31,26 +47,22 @@ exports.createProperty = asyncHandler(async (req, res) => {
     bedrooms,
     bathrooms,
     square_feet,
-    yearBuilt,
-    furnishingStatus,
-    amenities,
-    isFeatured,
+    commissionPercentage,
+    assignedAssociate,
   } = req.body;
-
   let parsedLocation;
   if (!location) {
     res.status(400);
     throw new Error("Location data is required.");
   }
   try {
-    parsedLocation = JSON.parse(location);
+    parsedLocation =
+      typeof location === "string" ? JSON.parse(location) : location;
   } catch (e) {
     res.status(400);
     throw new Error("Invalid location JSON format.");
   }
-
   const imageUrls = req.files ? req.files.map((file) => file.path) : [];
-
   const propertyData = {
     title,
     description,
@@ -58,26 +70,21 @@ exports.createProperty = asyncHandler(async (req, res) => {
     bedrooms,
     bathrooms,
     square_feet,
-    yearBuilt,
-    furnishingStatus,
-    isFeatured,
     location: parsedLocation,
-
-    
-    amenities: amenities || [],
-
     images: imageUrls,
     property_type,
     transaction_type,
     user: req.user.id,
+    commission: {
+      percentage: commissionPercentage || 2,
+      assignedAssociate: assignedAssociate || null,
+    },
   };
-
-  if (req.user.role === "admin") {
+  if (req.user.role === "Admin") {
     propertyData.status = "Approved";
   } else {
     propertyData.status = "Pending";
   }
-
   const property = await Property.create(propertyData);
   res.status(201).json({ success: true, data: property });
 });
@@ -88,29 +95,21 @@ exports.updateProperty = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Property not found");
   }
-  if (property.user.toString() !== req.user.id && req.user.role !== "admin") {
+  if (property.user.toString() !== req.user.id && req.user.role !== "Admin") {
     res.status(401);
     throw new Error("Not authorized to update this property");
   }
-
   let updatedData = { ...req.body };
-
-  if (req.body.location) {
+  if (req.body.location && typeof req.body.location === "string") {
     updatedData.location = JSON.parse(req.body.location);
   }
-
-  if (req.body.amenities) {
-    updatedData.amenities =
-      typeof req.body.amenities === "string"
-        ? req.body.amenities.split(",")
-        : req.body.amenities;
+  if (req.body.commissionPercentage || req.body.assignedAssociate) {
+    updatedData.commission = {
+      ...property.commission,
+      percentage: req.body.commissionPercentage,
+      assignedAssociate: req.body.assignedAssociate,
+    };
   }
-
-  if (req.files && req.files.length > 0) {
-    const newImageUrls = req.files.map((file) => file.path);
-    updatedData.images = [...(property.images || []), ...newImageUrls];
-  }
-
   property = await Property.findByIdAndUpdate(req.params.id, updatedData, {
     new: true,
     runValidators: true,
@@ -124,7 +123,7 @@ exports.deleteProperty = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Property not found");
   }
-  if (property.user.toString() !== req.user.id && req.user.role !== "admin") {
+  if (property.user.toString() !== req.user.id && req.user.role !== "Admin") {
     res.status(401);
     throw new Error("Not authorized to delete this property");
   }
@@ -133,19 +132,14 @@ exports.deleteProperty = asyncHandler(async (req, res) => {
 });
 
 exports.approveProperty = asyncHandler(async (req, res) => {
-  const property = await Property.findById(req.params.id);
+  const property = await Property.findByIdAndUpdate(
+    req.params.id,
+    { status: "Approved" },
+    { new: true }
+  );
   if (!property) {
     res.status(404);
     throw new Error("Property not found");
   }
-  property.status = "Approved";
-  await property.save();
   res.status(200).json({ success: true, data: property });
-});
-
-exports.getMyProperties = asyncHandler(async (req, res) => {
-  const properties = await Property.find({ user: req.user.id });
-  res
-    .status(200)
-    .json({ success: true, count: properties.length, data: properties });
 });

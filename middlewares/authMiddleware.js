@@ -1,9 +1,6 @@
-// /middlewares/authMiddleware.js
-
 const jwt = require("jsonwebtoken");
 const asyncHandler = require("express-async-handler");
 const User = require("../models/UserModel");
-
 exports.protect = asyncHandler(async (req, res, next) => {
   let token;
   if (
@@ -25,10 +22,15 @@ exports.protect = asyncHandler(async (req, res, next) => {
     throw new Error("Not authorized, token failed");
   }
 });
-
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !req.user.role) {
+      res.status(403);
+      throw new Error("Authorization failed: User role not found.");
+    }
+    const userRole = req.user.role.toLowerCase();
+    const allowedRoles = roles.map((role) => role.toLowerCase());
+    if (!allowedRoles.includes(userRole)) {
       res.status(403);
       throw new Error(
         `User role ${req.user.role} is not authorized to access this route`

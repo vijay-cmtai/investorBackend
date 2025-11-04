@@ -1,5 +1,24 @@
 const mongoose = require("mongoose");
 
+const inquiryNoteSchema = mongoose.Schema(
+  {
+    note: {
+      type: String,
+      required: true,
+    },
+    addedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: true }
+);
+
 const inquirySchema = mongoose.Schema(
   {
     property: {
@@ -16,6 +35,11 @@ const inquirySchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       required: true,
       ref: "User",
+    },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
     name: {
       type: String,
@@ -36,8 +60,30 @@ const inquirySchema = mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ["Pending", "Contacted", "Resolved"], 
-      default: "Pending", 
+      enum: [
+        "Pending",
+        "Assigned",
+        "In Progress",
+        "Contacted",
+        "Resolved",
+        "Closed",
+      ],
+      default: "Pending",
+    },
+    priority: {
+      type: String,
+      enum: ["Low", "Medium", "High", "Urgent"],
+      default: "Medium",
+    },
+    notes: [inquiryNoteSchema],
+    assignedAt: {
+      type: Date,
+      default: null,
+    },
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   {

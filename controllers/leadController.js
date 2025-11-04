@@ -19,7 +19,10 @@ exports.createLead = asyncHandler(async (req, res) => {
 
 exports.getAllLeads = asyncHandler(async (req, res) => {
   const features = new APIFeatures(
-    Lead.find().populate("property", "title").populate("assignedTo", "name"),
+    Lead.find()
+      .populate("property", "title")
+      .populate("assignedTo", "name")
+      .populate("notes.author", "name"),
     req.query
   )
     .filter()
@@ -48,23 +51,18 @@ exports.getLeadById = asyncHandler(async (req, res) => {
 
 exports.assignLead = asyncHandler(async (req, res) => {
   const { associateId } = req.body;
-  const lead = await Lead.findById(req.params.id);
+  const lead = await Lead.findByIdAndUpdate(
+    req.params.id,
+    { assignedTo: associateId, status: "Allocated" },
+    { new: true, runValidators: true }
+  )
+    .populate("assignedTo", "name")
+    .populate("property", "title");
 
   if (!lead) {
     res.status(404);
     throw new Error("Lead not found");
   }
-
-  const associate = await User.findById(associateId);
-  if (!associate || associate.role !== "Associate") {
-    res.status(400);
-    throw new Error("Invalid Associate ID");
-  }
-
-  lead.assignedTo = associateId;
-  lead.status = "Allocated";
-  await lead.save();
-
   res.status(200).json({ success: true, data: lead });
 });
 
@@ -76,18 +74,8 @@ exports.updateLeadStatus = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Lead not found");
   }
-
-  if (
-    lead.assignedTo.toString() !== req.user.id.toString() &&
-    req.user.role !== "Admin"
-  ) {
-    res.status(403);
-    throw new Error("Not authorized to update this lead");
-  }
-
   lead.status = status;
   await lead.save();
-
   res.status(200).json({ success: true, data: lead });
 });
 
@@ -99,4 +87,21 @@ exports.deleteLead = asyncHandler(async (req, res) => {
   }
   await lead.deleteOne();
   res.status(200).json({ success: true, data: {} });
+});
+
+exports.addNoteToLead = asyncHandler(async (req, res) => {
+  const { content } = req.body;
+  const lead = await Lead.findById(req.params.id);
+  if (!lead) {
+    res.status(404);
+    throw new Error("Lead not found");
+  }
+  const note = { content, author: req.user.id };
+  lead.notes.unshift(note);
+  await lead.save();
+  const populatedLead = await Lead.findById(lead._id)
+    .populate("property", "title")
+    .populate("assignedTo", "name")
+    .populate("notes.author", "name");
+  res.status(201).json({ success: true, data: populatedLead });
 });

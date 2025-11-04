@@ -5,12 +5,12 @@ const sendEmail = require("../utils/mailer");
 
 const sendTokenResponse = (user, statusCode, res, message = "") => {
   const token = user.getSignedJwtToken();
-  const { _id, name, email, role } = user;
+  const { _id, name, email, role, profileImage } = user;
   res.status(statusCode).json({
     success: true,
     message,
     token,
-    user: { id: _id, name, email, role },
+    user: { id: _id, name, email, role, profileImage },
   });
 };
 
@@ -23,13 +23,11 @@ exports.register = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error("Name, email, password, and role are required.");
   }
-
   const existingUser = await User.findOne({ email });
   if (existingUser) {
     res.status(409);
     throw new Error("User with this email already exists.");
   }
-
   if (role === "Admin") {
     const adminUser = await User.create({
       name,
@@ -47,20 +45,15 @@ exports.register = asyncHandler(async (req, res) => {
   } else {
     const otp = generateOtp();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-    const emailHtml = `
-      <div style="font-family: sans-serif; text-align: center; padding: 20px;">
-        <h2>Welcome to Investorsdeaal!</h2>
-        <p>Hi ${name}, your OTP for email verification is:</p>
-        <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px;">${otp}</p>
-        <p>This OTP is valid for 10 minutes.</p>
-      </div>
-    `;
+    const emailHtml = `<div><h2>Welcome to Investorsdeaal!</h2><p>Hi ${name}, your OTP for email verification is:</p><p>${otp}</p><p>This OTP is valid for 10 minutes.</p></div>`;
     await User.create({ name, email, password, role, otp, otpExpiry });
     await sendEmail(email, "Verify Your Email Address", emailHtml);
-    res.status(201).json({
-      success: true,
-      message: `User registration initiated. An OTP has been sent to ${email}.`,
-    });
+    res
+      .status(201)
+      .json({
+        success: true,
+        message: `User registration initiated. An OTP has been sent to ${email}.`,
+      });
   }
 });
 
@@ -102,6 +95,35 @@ exports.login = asyncHandler(async (req, res) => {
   sendTokenResponse(user, 200, res, "Login successful!");
 });
 
+exports.getMe = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+  res.status(200).json({ success: true, data: user });
+});
+
+exports.updateMe = asyncHandler(async (req, res) => {
+  const { name, email } = req.body;
+  const user = await User.findById(req.user.id);
+
+  if (!user) {
+    res.status(404);
+    throw new Error("User not found");
+  }
+
+  user.name = name || user.name;
+  user.email = email || user.email;
+
+  if (req.file) {
+    user.profileImage = req.file.path;
+  }
+
+  const updatedUser = await user.save();
+
+  res.status(200).json({
+    success: true,
+    data: updatedUser,
+  });
+});
+
 exports.forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
   const user = await User.findOne({ email });
@@ -120,10 +142,12 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
   const emailHtml = `<p>Please click this link to reset your password: <a href="${resetUrl}">${resetUrl}</a></p>`;
   try {
     await sendEmail(user.email, "Password Reset Request", emailHtml);
-    res.status(200).json({
-      success: true,
-      message: "Password reset link sent to your email!",
-    });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Password reset link sent to your email!",
+      });
   } catch (err) {
     user.forgotPasswordToken = undefined;
     user.forgotPasswordExpiry = undefined;
@@ -154,8 +178,4 @@ exports.resetPassword = asyncHandler(async (req, res) => {
   user.forgotPasswordExpiry = undefined;
   await user.save();
   sendTokenResponse(user, 200, res, "Password has been reset successfully.");
-});
-
-exports.getMe = asyncHandler(async (req, res) => {
-  res.status(200).json({ success: true, data: req.user });
 });

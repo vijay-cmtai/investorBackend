@@ -18,8 +18,13 @@ const commissionRoutes = require("./routes/commissionRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
-// --- YEH LINE ADD KAREIN ---
-const inquiryRoutes = require("./routes/inquiryRoutes"); // Inquiry routes ko import karein
+const inquiryRoutes = require("./routes/inquiryRoutes");
+const roleRoutes = require("./routes/roleRoutes");
+const dashboardRoutes1 = require("./routes/dashboardRoutes1");
+const contactRoutes = require("./routes/contactRoutes.js");
+const blogRoutes = require("./routes/blogRoutes"); 
+
+
 
 const app = express();
 const server = http.createServer(app);
@@ -45,15 +50,20 @@ app.get("/", (req, res) => {
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/roles", roleRoutes);
 app.use("/api/v1/properties", propertyRoutes);
 app.use("/api/v1/leads", leadRoutes);
-// --- YEH LINE ADD KAREIN ---
-app.use("/api/v1/inquiries", inquiryRoutes); // Sahi endpoint par inquiry routes ko use karein
+app.use("/api/v1/inquiries", inquiryRoutes);
 app.use("/api/v1/sales", saleRoutes);
 app.use("/api/v1/commissions", commissionRoutes);
 app.use("/api/v1/reports", reportRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/wishlist", wishlistRoutes);
+app.use("/api/dashboard1", dashboardRoutes1);
+app.use("/api/v1/contact", contactRoutes);
+app.use("/api/v1/blogs", blogRoutes);
+
+
 
 io.on("connection", (socket) => {
   console.log(`✅ User connected via WebSocket: ${socket.id}`);

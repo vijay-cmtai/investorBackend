@@ -9,7 +9,6 @@ exports.getUsers = asyncHandler(async (req, res) => {
     .limitFields()
     .paginate();
   const users = await features.query;
-
   res.status(200).json({ success: true, count: users.length, data: users });
 });
 
@@ -41,7 +40,7 @@ exports.deleteUser = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
   await user.deleteOne();
-  res.status(200).json({ success: true, data: {} });
+  res.status(200).json({ success: true, message: "User deleted successfully" });
 });
 
 exports.getAssociates = asyncHandler(async (req, res) => {
@@ -56,4 +55,46 @@ exports.getCompanies = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json({ success: true, count: companies.length, data: companies });
+});
+
+exports.updateUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+
+  if (user) {
+    user.name = req.body.name || user.name;
+    user.phone = req.body.phone || user.phone;
+    if (req.file) {
+      user.profileImage = req.file.path;
+    }
+    const updatedUser = await user.save();
+    res.json({
+      id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      phone: updatedUser.phone,
+      profileImage: updatedUser.profileImage,
+    });
+  } else {
+    res.status(404);
+    throw new Error("User not found");
+  }
+});
+
+exports.changeUserPassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    res.status(400);
+    throw new Error("Please provide current and new passwords");
+  }
+  const user = await User.findById(req.user.id).select("+password");
+
+  if (!user || !(await user.matchPassword(currentPassword))) {
+    res.status(401);
+    throw new Error("Invalid current password");
+  }
+  user.password = newPassword;
+  await user.save();
+  res.json({ success: true, message: "Password updated successfully" });
 });

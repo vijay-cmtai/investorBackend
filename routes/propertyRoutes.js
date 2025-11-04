@@ -1,5 +1,3 @@
-// /routes/propertyRoutes.js
-
 const express = require("express");
 const {
   getProperties,
@@ -7,28 +5,24 @@ const {
   createProperty,
   updateProperty,
   deleteProperty,
-  getMyProperties,
   approveProperty,
 } = require("../controllers/propertyController");
 const { protect, authorize } = require("../middlewares/authMiddleware");
-const upload = require("../middlewares/uploadMiddleware");
+const { uploadProperties } = require("../middlewares/uploadMiddleware");
+const reviewRouter = require("./reviewRoutes");
+
 const router = express.Router();
 
-router
-  .route("/")
-  .get(getProperties)
-  .post(
-    protect,
-    authorize("Associate", "Company", "Admin"),
-    upload.array("images", 10),
-    createProperty
-  );
+router.use("/:id/reviews", reviewRouter);
 
-router.get(
-  "/my-properties",
+router.get("/", getProperties);
+
+router.post(
+  "/",
   protect,
-  authorize("Associate", "Company"),
-  getMyProperties
+  authorize("Admin", "Company", "Associate"),
+  uploadProperties.array("images", 10),
+  createProperty
 );
 
 router
@@ -36,11 +30,11 @@ router
   .get(getProperty)
   .put(
     protect,
-    authorize("Associate", "Company", "Admin"),
-    upload.array("images", 10),
+    authorize("Admin", "Company", "Associate"),
+    uploadProperties.array("images", 10),
     updateProperty
   )
-  .delete(protect, authorize("Associate", "Company", "Admin"), deleteProperty);
+  .delete(protect, authorize("Admin", "Company", "Associate"), deleteProperty);
 
 router.route("/:id/approve").put(protect, authorize("Admin"), approveProperty);
 

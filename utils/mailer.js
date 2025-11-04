@@ -14,9 +14,8 @@ const sendEmail = async (to, subject, html) => {
         pass: process.env.MAIL_PASS,
       },
     });
-
     await transporter.sendMail({
-      from: `"Naraaglobal Enterprises" <${process.env.MAIL_USER}>`,
+      from: `"Investor Deal" <${process.env.MAIL_USER}>`,
       to: to,
       subject: subject,
       html: html,

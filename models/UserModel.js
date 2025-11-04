@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
+
 const UserSchema = new mongoose.Schema(
   {
     name: { type: String, required: [true, "Please add a name"] },
@@ -14,9 +14,11 @@ const UserSchema = new mongoose.Schema(
         "Please add a valid email",
       ],
     },
+    phone: { type: String, default: "" }, // === YEH FIELD ADD KAREIN ===
+    profileImage: { type: String, default: "" },
     role: {
       type: String,
-      enum: ["Customer", "Associate", "Company", "Admin","Broker"],
+      enum: ["Customer", "Associate", "Company", "Admin", "Broker"],
       default: "Customer",
     },
     password: {
@@ -40,6 +42,7 @@ const UserSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next();
@@ -48,12 +51,15 @@ UserSchema.pre("save", async function (next) {
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
+
 UserSchema.methods.getSignedJwtToken = function () {
   return jwt.sign({ id: this._id, role: this.role }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE,
   });
 };
+
 UserSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
+
 module.exports = mongoose.model("User", UserSchema);
