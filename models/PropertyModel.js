@@ -54,6 +54,7 @@ const PropertySchema = new mongoose.Schema(
       default: {},
     },
     isFeatured: { type: Boolean, default: false },
+    isHotDeal: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
     yearBuilt: { type: Number },
     floor: { type: Number },

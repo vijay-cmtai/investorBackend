@@ -3,20 +3,24 @@ const User = require("../models/UserModel");
 const asyncHandler = require("express-async-handler");
 
 exports.getProperties = asyncHandler(async (req, res) => {
-  let query = {};
+  let query = Property.find({});
   if (req.user && req.user.role !== "Admin") {
-    const userRole = req.user.role;
-    const userId = req.user.id;
-    if (userRole === "Associate") {
-      query = { user: userId };
-    } else if (userRole === "Company") {
-      const associates = await User.find({ referredBy: userId }).select("_id");
-      const associateIds = associates.map((a) => a._id);
-      const userIds = [userId, ...associateIds];
-      query = { user: { $in: userIds } };
+    let userFilter = {};
+    if (req.user.role === "Associate") {
+      userFilter = { user: req.user.id };
+    } else if (req.user.role === "Company") {
+      const associates = await User.find({ referredBy: req.user.id }).select(
+        "_id"
+      );
+      userFilter = {
+        user: { $in: [req.user.id, ...associates.map((a) => a._id)] },
+      };
     }
+    query = query.where(userFilter);
   }
-  const properties = await Property.find(query)
+  if (req.query.isFeatured) query = query.where({ isFeatured: true });
+  if (req.query.isHotDeal) query = query.where({ isHotDeal: true });
+  const properties = await query
     .populate("user", "name role")
     .sort({ createdAt: -1 });
   res
@@ -28,7 +32,6 @@ exports.getProperty = asyncHandler(async (req, res) => {
   const property = await Property.findById(req.params.id)
     .populate("user", "name email role")
     .populate("reviews");
-
   if (!property) {
     res.status(404);
     throw new Error("Property not found");
@@ -37,54 +40,16 @@ exports.getProperty = asyncHandler(async (req, res) => {
 });
 
 exports.createProperty = asyncHandler(async (req, res) => {
-  const {
-    title,
-    description,
-    price,
-    location,
-    property_type,
-    transaction_type,
-    bedrooms,
-    bathrooms,
-    square_feet,
-    commissionPercentage,
-    assignedAssociate,
-  } = req.body;
-  let parsedLocation;
-  if (!location) {
-    res.status(400);
-    throw new Error("Location data is required.");
-  }
-  try {
-    parsedLocation =
-      typeof location === "string" ? JSON.parse(location) : location;
-  } catch (e) {
-    res.status(400);
-    throw new Error("Invalid location JSON format.");
-  }
   const imageUrls = req.files ? req.files.map((file) => file.path) : [];
-  const propertyData = {
-    title,
-    description,
-    price,
-    bedrooms,
-    bathrooms,
-    square_feet,
-    location: parsedLocation,
-    images: imageUrls,
-    property_type,
-    transaction_type,
-    user: req.user.id,
-    commission: {
-      percentage: commissionPercentage || 2,
-      assignedAssociate: assignedAssociate || null,
-    },
-  };
-  if (req.user.role === "Admin") {
-    propertyData.status = "Approved";
-  } else {
-    propertyData.status = "Pending";
+  const propertyData = { ...req.body, images: imageUrls, user: req.user.id };
+  if (req.body.location) propertyData.location = JSON.parse(req.body.location);
+  if (req.body.commissionPercentage || req.body.assignedAssociate) {
+    propertyData.commission = {
+      percentage: req.body.commissionPercentage,
+      assignedAssociate: req.body.assignedAssociate,
+    };
   }
+  if (req.user.role === "Admin") propertyData.status = "Approved";
   const property = await Property.create(propertyData);
   res.status(201).json({ success: true, data: property });
 });
@@ -100,15 +65,11 @@ exports.updateProperty = asyncHandler(async (req, res) => {
     throw new Error("Not authorized to update this property");
   }
   let updatedData = { ...req.body };
+  if (req.files && req.files.length > 0) {
+    updatedData.images = req.files.map((file) => file.path);
+  }
   if (req.body.location && typeof req.body.location === "string") {
     updatedData.location = JSON.parse(req.body.location);
-  }
-  if (req.body.commissionPercentage || req.body.assignedAssociate) {
-    updatedData.commission = {
-      ...property.commission,
-      percentage: req.body.commissionPercentage,
-      assignedAssociate: req.body.assignedAssociate,
-    };
   }
   property = await Property.findByIdAndUpdate(req.params.id, updatedData, {
     new: true,
@@ -141,5 +102,38 @@ exports.approveProperty = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Property not found");
   }
+  res.status(200).json({ success: true, data: property });
+});
+
+exports.toggleHotDeal = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) {
+    res.status(404);
+    throw new Error("Property not found");
+  }
+  property.isHotDeal = !property.isHotDeal;
+  await property.save();
+  res.status(200).json({ success: true, data: property });
+});
+
+exports.toggleFeatured = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) {
+    res.status(404);
+    throw new Error("Property not found");
+  }
+  property.isFeatured = !property.isFeatured;
+  await property.save();
+  res.status(200).json({ success: true, data: property });
+});
+
+exports.toggleVerified = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) {
+    res.status(404);
+    throw new Error("Property not found");
+  }
+  property.isVerified = !property.isVerified;
+  await property.save();
   res.status(200).json({ success: true, data: property });
 });
