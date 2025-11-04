@@ -21,31 +21,55 @@ const wishlistRoutes = require("./routes/wishlistRoutes");
 const inquiryRoutes = require("./routes/inquiryRoutes");
 const roleRoutes = require("./routes/roleRoutes");
 const dashboardRoutes1 = require("./routes/dashboardRoutes1");
-const contactRoutes = require("./routes/contactRoutes.js");
-const blogRoutes = require("./routes/blogRoutes"); 
-
-
+const contactRoutes = require("./routes/contactRoutes");
+const blogRoutes = require("./routes/blogRoutes");
 
 const app = express();
 const server = http.createServer(app);
 
-const corsOptions = {
-  origin: "http://localhost:8080",
-  credentials: true,
-};
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "https://investor-frontend-taupe.vercel.app",
+];
 
-app.use(cors(corsOptions));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(express.json());
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
-const io = new Server(server, { cors: corsOptions });
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+  },
+});
+
 app.set("socketio", io);
 
+io.on("connection", (socket) => {
+  console.log(`✅ User connected: ${socket.id}`);
+  socket.on("disconnect", () => console.log(`❌ User disconnected: ${socket.id}`));
+});
+
 app.get("/", (req, res) => {
-  res.json({ message: "Photon Platform API is running..." });
+  res.json({ message: "Architect Platform API is running..." });
 });
 
 app.use("/api/v1/auth", authRoutes);
@@ -63,21 +87,10 @@ app.use("/api/dashboard1", dashboardRoutes1);
 app.use("/api/v1/contact", contactRoutes);
 app.use("/api/v1/blogs", blogRoutes);
 
-
-
-io.on("connection", (socket) => {
-  console.log(`✅ User connected via WebSocket: ${socket.id}`);
-  socket.on("disconnect", () => {
-    console.log(`❌ User disconnected: ${socket.id}`);
-  });
-});
-
 app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(
-    `🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`
-  );
+  console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
