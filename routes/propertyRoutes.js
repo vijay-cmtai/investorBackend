@@ -35,7 +35,6 @@ router
   .put(
     protect,
     authorize("Admin", "Company", "Associate"),
-    // === YAHAN BHI BADLAV KIYA GAYA HAI ===
     uploadProperties.fields([
       { name: "images", maxCount: 10 },
       { name: "videos", maxCount: 2 },
