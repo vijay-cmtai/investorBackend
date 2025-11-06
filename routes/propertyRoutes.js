@@ -22,19 +22,28 @@ router.post(
   "/",
   protect,
   authorize("Admin", "Company", "Associate"),
-  uploadProperties.array("images", 10),
+  uploadProperties.fields([
+    { name: "images", maxCount: 10 },
+    { name: "videos", maxCount: 2 }, 
+  ]),
   createProperty
 );
+
 router
   .route("/:id")
   .get(getProperty)
   .put(
     protect,
     authorize("Admin", "Company", "Associate"),
-    uploadProperties.array("images", 10),
+    // === YAHAN BHI BADLAV KIYA GAYA HAI ===
+    uploadProperties.fields([
+      { name: "images", maxCount: 10 },
+      { name: "videos", maxCount: 2 },
+    ]),
     updateProperty
   )
   .delete(protect, authorize("Admin", "Company", "Associate"), deleteProperty);
+
 router.route("/:id/approve").put(protect, authorize("Admin"), approveProperty);
 router
   .route("/:id/toggle-hotdeal")
