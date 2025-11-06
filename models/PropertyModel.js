@@ -45,6 +45,7 @@ const PropertySchema = new mongoose.Schema(
       default: "Pending",
     },
     images: { type: [String], default: [] },
+    videos: { type: [String], default: [] }, // <-- YEH NAYA FIELD HAI
     bedrooms: { type: Number, required: true, default: 0 },
     bathrooms: { type: Number, required: true, default: 0 },
     square_feet: { type: Number, required: true },
