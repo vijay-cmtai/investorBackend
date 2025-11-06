@@ -17,10 +17,17 @@ const PropertySchema = new mongoose.Schema(
     property_type: {
       type: String,
       enum: [
+        "Residential",
+        "Commercial",
+        "Agriculture",
+        "Industrial",
+        "Resale",
+        "New Launch",
+        "Upcoming",
+        "Emergency",
         "Apartment",
         "Villa",
         "Plot",
-        "Commercial Space",
         "Office",
         "Farmhouse",
         "Builder Floor",
@@ -29,7 +36,7 @@ const PropertySchema = new mongoose.Schema(
     },
     transaction_type: {
       type: String,
-      enum: ["sale", "rent", "lease", "commercial"],
+      enum: ["sale", "rent", "lease"],
       required: true,
     },
     status: {
