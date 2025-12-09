@@ -1,27 +1,30 @@
 const multer = require("multer");
-const cloudinary = require("../config/cloudinary");
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const multerS3 = require("multer-s3");
+const s3 = require("../config/s3");
 
-const propertyStorage = new CloudinaryStorage({
-  cloudinary,
-  params: (req, file) => {
-    return {
-      folder: "properties",
-      resource_type: "auto", 
-      allowed_formats: ["jpg", "jpeg", "png", "webp", "mp4", "mov", "avi"],
-    };
-  },
+const bucket = process.env.AWS_S3_BUCKET_NAME;
+
+const uploadProperties = multer({
+  storage: multerS3({
+    s3,
+    bucket,
+    acl: "public-read",
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    key: (req, file, cb) => {
+      cb(null, `properties/${Date.now()}-${file.originalname}`);
+    },
+  }),
 });
-
-const profileStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "profiles",
-    allowed_formats: ["jpg", "jpeg", "png"],
-  },
+const uploadProfile = multer({
+  storage: multerS3({
+    s3,
+    bucket,
+    acl: "public-read",
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    key: (req, file, cb) => {
+      cb(null, `profiles/${Date.now()}-${file.originalname}`);
+    },
+  }),
 });
-
-const uploadProperties = multer({ storage: propertyStorage });
-const uploadProfile = multer({ storage: profileStorage });
 
 module.exports = { uploadProperties, uploadProfile };
